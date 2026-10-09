@@ -8,3 +8,6 @@ export * from './services/leadsApi';
 
 // Hooks
 export * from './hooks/useLeads';
+
+// Components
+export { ImportLeadsDialog } from './components/ImportLeadsDialog';

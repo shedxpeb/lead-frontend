@@ -74,6 +74,11 @@ let refreshPromise: Promise<any> | null = null;
 // Response interceptor - handle 401 and date parsing
 apiClient.interceptors.response.use(
   (response) => {
+    // Skip date parsing for binary responses (Blob, ArrayBuffer)
+    if (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer') {
+      return response;
+    }
+
     // Parse date strings in response data
     if (response.data) {
       response.data = parseDates(response.data);

@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Lead, LeadStatus, LeadPriority, LeadSource } from '@/types/leads';
 import { useLeads, useDeleteLead, useCreateLead, useUpdateLead } from '@/features/leads/hooks/useLeads';
+import { leadsApi } from '@/features/leads/services/leadsApi';
 import { toast } from '@/components/ui/toast';
 import { MobileLeadCard } from '@/features/leads/components/MobileLeadCard';
+import { ImportLeadsDialog } from '@/features/leads/components/ImportLeadsDialog';
 import {
   Plus,
   RefreshCw,
@@ -19,6 +21,8 @@ import {
   Edit,
   Trash2,
   Eye,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
 
@@ -70,11 +74,13 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(25);
   const [sortBy] = useState('createdAt');
   const [sortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isExporting, setIsExporting] = useState(false);
 
   // Simple form state
   const [formData, setFormData] = useState({
@@ -175,6 +181,64 @@ export default function LeadsPage() {
     }
   };
 
+  const handleExportLeads = async () => {
+    try {
+      setIsExporting(true);
+      const params = {
+        search: searchQuery.trim() || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        priority: priorityFilter === 'all' ? undefined : priorityFilter,
+        source: sourceFilter === 'all' ? undefined : sourceFilter,
+        sortBy,
+        sortOrder,
+      };
+
+      const blob = await leadsApi.export(params);
+      
+      if (!blob || blob.size === 0) {
+        toast.error('Failed to export leads: empty response from server');
+        return;
+      }
+
+      if (!(blob instanceof Blob)) {
+        toast.error('Invalid file format received from server');
+        return;
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `leads_export_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      if (leads.length === 0) {
+        toast.info('Exported empty file - no leads found with current filters');
+      } else {
+        toast.success(`Exported ${leads.length} lead(s) successfully`);
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export leads';
+      
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        toast.error('Your session has expired. Please sign in again.');
+      } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+        toast.error('You do not have permission to export leads.');
+      } else if (errorMessage.includes('404')) {
+        toast.error('Export endpoint not found.');
+      } else if (errorMessage.includes('500')) {
+        toast.error('Server error. Please try again later.');
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const openEditDialog = (lead: Lead) => {
     setSelectedLead(lead);
     setFormData({
@@ -204,17 +268,57 @@ export default function LeadsPage() {
             <h1 className="text-[26px] md:text-[28px] font-bold text-foreground tracking-tight">Leads</h1>
             <p className="text-[13px] md:text-[14px] text-muted-foreground mt-0.5">Manage and track your business opportunities</p>
           </div>
-          <Button onClick={() => setIsCreateDialogOpen(true)} className="h-[42px] px-4 hidden sm:flex rounded-xl">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Lead
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleExportLeads}
+              disabled={isExporting || isLoading}
+              variant="outline"
+              className="h-[42px] px-4 hidden sm:flex rounded-xl"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'Export Excel'}
+            </Button>
+            <Button
+              onClick={() => setIsImportDialogOpen(true)}
+              variant="outline"
+              className="h-[42px] px-4 hidden sm:flex rounded-xl"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import Excel
+            </Button>
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="h-[42px] px-4 hidden sm:flex rounded-xl">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Lead
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Add Lead Button */}
-        <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full h-[42px] sm:hidden mb-5 rounded-xl">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Lead
-        </Button>
+        <div className="flex flex-col gap-2 sm:hidden mb-5">
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full h-[42px] rounded-xl">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Lead
+          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleExportLeads}
+              disabled={isExporting || isLoading}
+              variant="outline"
+              className="flex-1 h-[42px] rounded-xl"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'Export'}
+            </Button>
+            <Button
+              onClick={() => setIsImportDialogOpen(true)}
+              variant="outline"
+              className="flex-1 h-[42px] rounded-xl"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+          </div>
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-5">
@@ -735,6 +839,13 @@ export default function LeadsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Import Leads Dialog */}
+      <ImportLeadsDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onSuccess={refetch}
+      />
     </MainLayout>
   );
 }

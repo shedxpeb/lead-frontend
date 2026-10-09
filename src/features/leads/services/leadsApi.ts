@@ -100,8 +100,130 @@ export const leadsApi = {
   getLogs: (id: string) =>
     api.get<BackendResponse<Array<{ id: string; action: string; description: string; timestamp: Date; userId: string | null }>>>(`/leads/${id}/logs`),
 
-  export: (params?: PaginationParams & LeadsFilters) =>
-    api.get<BackendResponse<LeadsData>>('/leads/export', { params }),
+  export: async (params?: PaginationParams & LeadsFilters) => {
+    try {
+      const response = await apiClient.get('/leads/export', {
+        params,
+        responseType: 'blob',
+      });
+      
+      if (!response.data || response.data.size === 0) {
+        throw new Error('Empty response from server');
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        if (status === 401) throw new Error('Unauthorized: Session expired');
+        if (status === 403) throw new Error('Forbidden: No permission');
+        if (status === 404) throw new Error('Not Found: Export endpoint');
+        if (status === 500) throw new Error('Server Error: 500');
+        throw new Error(error.response.data?.message || `Server error: ${status}`);
+      }
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  },
+
+  downloadTemplate: async () => {
+    try {
+      const response = await apiClient.get('/leads/import/template', {
+        responseType: 'blob',
+      });
+      
+      if (!response.data || response.data.size === 0) {
+        throw new Error('Empty response from server');
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        if (status === 401) throw new Error('Unauthorized: Session expired');
+        if (status === 403) throw new Error('Forbidden: No permission');
+        if (status === 404) throw new Error('Not Found: Template endpoint');
+        if (status === 500) throw new Error('Server Error: 500');
+        throw new Error(error.response.data?.message || `Server error: ${status}`);
+      }
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  },
+
+  validateImport: async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await apiClient.post<BackendResponse<ImportValidationResult>>(
+        '/leads/import/validate',
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        },
+      );
+      
+      if (!response.data || !response.data.data) {
+        throw new Error('Invalid response from server');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        if (status === 401) throw new Error('Unauthorized: Session expired');
+        if (status === 403) throw new Error('Forbidden: No permission');
+        if (status === 413) throw new Error('File too large: Maximum 5MB');
+        if (status === 500) throw new Error('Server Error: 500');
+        throw new Error(data?.message || data?.error || `Server error: ${status}`);
+      }
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  },
+
+  importLeads: async (file: File, duplicateHandling: 'skip' | 'review' | 'update') => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('duplicateHandling', duplicateHandling);
+      const response = await apiClient.post<BackendResponse<ImportResult>>(
+        '/leads/import',
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        },
+      );
+      
+      if (!response.data || !response.data.data) {
+        throw new Error('Invalid response from server');
+      }
+      
+      return response.data.data;
+    } catch (error: any) {
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        if (status === 401) throw new Error('Unauthorized: Session expired');
+        if (status === 403) throw new Error('Forbidden: No permission');
+        if (status === 500) throw new Error('Server Error: 500');
+        throw new Error(data?.message || data?.error || `Server error: ${status}`);
+      }
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout');
+      }
+      throw error;
+    }
+  },
 
   checkDuplicate: (mobile?: string, email?: string) =>
     api.get<BackendResponse<{ isDuplicate: boolean; matches?: Lead[] }>>('/leads/check-duplicate', {
@@ -144,15 +266,6 @@ export const leadsApi = {
 
   updateWorkflow: (id: string, stage: string, notes?: string) =>
     api.post<BackendResponse<Lead>>(`/leads/${id}/workflow`, { stage, notes }),
-
-  importLeads: (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return apiClient.post<BackendResponse<ImportResult>>('/leads/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
-    }).then(res => res.data);
-  },
 };
 
 export interface ImportRowError {
@@ -162,11 +275,25 @@ export interface ImportRowError {
   data?: Record<string, any>;
 }
 
+export interface ImportValidationResult {
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicates: number;
+  validRows: Record<string, any>[];
+  errors: ImportRowError[];
+  duplicatesList: Array<{
+    rowNumber: number;
+    existingLead: any;
+    newData: Record<string, any>;
+  }>;
+}
+
 export interface ImportResult {
   total: number;
   imported: number;
   skipped: number;
   duplicates: number;
-  invalid: number;
+  failed: number;
   rows: ImportRowError[];
 }
