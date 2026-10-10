@@ -163,7 +163,7 @@ export const leadsApi = {
         '/leads/import/validate',
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          // Do NOT set Content-Type for FormData - let browser generate multipart boundary
           timeout: 120000,
         },
       );
@@ -199,7 +199,7 @@ export const leadsApi = {
         '/leads/import',
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          // Do NOT set Content-Type for FormData - let browser generate multipart boundary
           timeout: 120000,
         },
       );
