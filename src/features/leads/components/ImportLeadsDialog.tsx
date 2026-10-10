@@ -160,6 +160,10 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
       
       if (result.imported > 0) {
         toast.success(`Successfully imported ${result.imported} lead(s)`);
+        // Auto-close dialog after successful import
+        setTimeout(() => {
+          handleClose();
+        }, 2000);
       } else if (result.skipped > 0) {
         toast.info(`${result.skipped} lead(s) skipped`);
       } else if (result.failed > 0) {
