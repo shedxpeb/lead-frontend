@@ -147,13 +147,16 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
         toast.error(errorMessage);
       } else if (errorMessage.includes('empty') || errorMessage.includes('corrupted')) {
         toast.error(errorMessage);
+      } else if (errorMessage.includes('No file uploaded')) {
+        toast.error('No file was uploaded. Please try again.');
       } else if (errorMessage.includes('500')) {
         toast.error('Server error. Please try again later.');
       } else {
         toast.error(errorMessage);
       }
       
-      setIsProcessing(false);
+      // Keep modal open in upload step after error
+      setStep('upload');
     } finally {
       setIsProcessing(false);
     }
