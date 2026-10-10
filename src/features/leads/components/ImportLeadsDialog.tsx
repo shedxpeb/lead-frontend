@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as ExcelJS from 'exceljs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,17 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [duplicateHandling, setDuplicateHandling] = useState<'skip' | 'review' | 'update'>('skip');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setFile(null);
+      setValidationResult(null);
+      setImportResult(null);
+      setDuplicateHandling('skip');
+      setStep('upload');
+    }
+  }, [open]);
 
   const handleDownloadTemplate = async () => {
     try {
@@ -160,12 +171,18 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
       
       if (result.imported > 0) {
         toast.success(`Successfully imported ${result.imported} lead(s)`);
-        // Auto-close dialog after successful import
+        // Close dialog immediately after successful import
         setTimeout(() => {
           handleClose();
-        }, 2000);
+        }, 1000);
       } else if (result.skipped > 0) {
         toast.info(`${result.skipped} lead(s) skipped`);
+        // Close dialog if only skipped (no errors)
+        if (result.failed === 0) {
+          setTimeout(() => {
+            handleClose();
+          }, 1000);
+        }
       } else if (result.failed > 0) {
         toast.error(`Failed to import ${result.failed} lead(s)`);
       }
@@ -191,7 +208,6 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
   };
 
   const handleReset = () => {
-    if (isProcessing) return;
     setFile(null);
     setValidationResult(null);
     setImportResult(null);
