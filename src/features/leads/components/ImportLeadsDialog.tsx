@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
@@ -69,14 +69,12 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
   const handleFileSelect = (selectedFile: File) => {
     const validTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/csv',
     ];
-    const validExtensions = ['.xlsx', '.xls', '.csv'];
+    const validExtensions = ['.xlsx'];
     const fileExtension = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
 
     if (!validTypes.includes(selectedFile.type) && !validExtensions.includes(fileExtension)) {
-      toast.error('Please upload an Excel (.xlsx, .xls) or CSV file');
+      toast.error('Please upload an Excel (.xlsx) file');
       return;
     }
 
@@ -203,32 +201,42 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
     onOpenChange(false);
   };
 
-  const downloadErrorReport = () => {
+  const downloadErrorReport = async () => {
     if (!validationResult || validationResult.errors.length === 0) return;
 
-    const errorData = validationResult.errors.map((error) => ({
-      'Row Number': error.rowNumber,
-      'Status': error.status,
-      'Errors': error.errors.join('; '),
-      ...error.data,
-    }));
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Errors');
 
-    const worksheet = XLSX.utils.json_to_sheet(errorData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Errors');
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      worksheet.columns = [
+        { header: 'Row Number', key: 'rowNumber', width: 15 },
+        { header: 'Status', key: 'status', width: 15 },
+        { header: 'Errors', key: 'errors', width: 50 },
+      ];
 
-    const blob = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'import_errors.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+      validationResult.errors.forEach((error) => {
+        worksheet.addRow({
+          rowNumber: error.rowNumber,
+          status: error.status,
+          errors: error.errors.join('; '),
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'import_errors.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      toast.error('Failed to generate error report');
+    }
   };
 
   return (
@@ -264,11 +272,11 @@ export function ImportLeadsDialog({ open, onOpenChange, onSuccess }: ImportLeads
                 Drag and drop your Excel file here, or click to browse
               </p>
               <p className="text-xs text-muted-foreground mb-4">
-                Supports .xlsx, .xls, and .csv files (max 5MB, 1000 rows)
+                Supports .xlsx files (max 5MB, 1000 rows)
               </p>
               <input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx"
                 onChange={(e) => {
                   const selectedFile = e.target.files?.[0];
                   if (selectedFile) handleFileSelect(selectedFile);
